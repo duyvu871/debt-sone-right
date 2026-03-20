@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  quality-gates:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Security version gate (React2Shell)
+        run: npm run check:security-versions
+
+      - name: Layer import rules (FSD dependency rule)
+        run: npm run check:layering
+
+      - name: Biome lint/format checks
+        run: npm run lint
+
+      - name: TypeScript typecheck
+        run: npm run typecheck
+
+      - name: React2Shell downgrade scan
+        run: npx fix-react2shell-next
+

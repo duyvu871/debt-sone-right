@@ -1,0 +1,6 @@
+#!/usr/bin/env sh
+set -e
+
+npm run check:security-versions
+npm run check:layering
+npm run typecheck

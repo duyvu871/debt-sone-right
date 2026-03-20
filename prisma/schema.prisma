@@ -1,0 +1,84 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum DebtCurrency {
+  VND
+  USD
+}
+
+enum DebtStatus {
+  OPEN
+  COMPLETED
+  OVERDUE
+}
+
+model Organization {
+  id          String   @id @default(uuid())
+  createdAt   DateTime @default(now())
+  name        String?
+
+  creditors         Creditor[]
+  debts             Debt[]
+  repaymentRecords RepaymentRecord[]
+}
+
+model Creditor {
+  id        String   @id @default(uuid())
+  tenantId  String
+  name      String
+  phone     String?
+  note      String?
+  createdAt DateTime @default(now())
+
+  organization Organization @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  debts        Debt[]
+
+  @@index([tenantId])
+}
+
+model Debt {
+  id           String     @id @default(uuid())
+  tenantId     String
+  creditorId   String
+  totalAmount  Decimal    @db.Decimal(18, 2)
+  currency     DebtCurrency @default(VND)
+  occurredAt   DateTime
+  dueAt        DateTime
+  status       DebtStatus @default(OPEN)
+  createdAt    DateTime @default(now())
+
+  creditor Creditor @relation(fields: [creditorId], references: [id], onDelete: Restrict)
+  organization Organization @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  repaymentRecords RepaymentRecord[]
+
+  @@index([tenantId])
+  @@index([creditorId])
+}
+
+model RepaymentRecord {
+  id          String   @id @default(uuid())
+  tenantId    String
+  debtId      String
+  happenedAt DateTime
+  deltaAmount Decimal  @db.Decimal(18, 2)
+  note        String
+  proofUrl    String
+  createdAt   DateTime @default(now())
+
+  organization Organization @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  debt         Debt         @relation(fields: [debtId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([debtId])
+}
