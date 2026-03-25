@@ -414,32 +414,36 @@ export function LedgerOverviewChart({ stats, repayments }: Props) {
       </TradingChartSurface>
 
       {view === "trend" && trendFooter && trendRows.length > 0 ? (
-        <div className="mt-3 grid gap-2 rounded-lg border border-white/40 bg-white/25 px-3 py-2.5 text-[11px] backdrop-blur-sm dark:border-white/10 dark:bg-white/5 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="mt-3 grid gap-3 rounded-lg border border-white/40 bg-white/25 px-3 py-3 backdrop-blur-sm dark:border-white/10 dark:bg-white/5 sm:grid-cols-2 lg:grid-cols-4">
           <div>
-            <div className="text-muted-foreground">
+            <div className="text-sm text-muted-foreground md:text-base">
               Tổng trong các tháng hiển thị
             </div>
-            <div className="mt-0.5 font-semibold tabular-nums text-foreground">
+            <div className="mt-1 text-lg font-semibold tabular-nums text-foreground md:text-xl">
               {formatMoney(trendFooter.sum, sampleCurrency)}
             </div>
           </div>
           <div>
-            <div className="text-muted-foreground">Trung bình / tháng</div>
-            <div className="mt-0.5 font-semibold tabular-nums text-foreground">
+            <div className="text-sm text-muted-foreground md:text-base">
+              Trung bình / tháng
+            </div>
+            <div className="mt-1 text-lg font-semibold tabular-nums text-foreground md:text-xl">
               {formatMoney(trendFooter.avgMonth, sampleCurrency)}
             </div>
           </div>
           <div>
-            <div className="text-muted-foreground">Tháng trả cao nhất</div>
-            <div className="mt-0.5 font-semibold tabular-nums text-foreground">
+            <div className="text-sm text-muted-foreground md:text-base">
+              Tháng trả cao nhất
+            </div>
+            <div className="mt-1 text-lg font-semibold tabular-nums text-foreground md:text-xl">
               {formatMoney(trendFooter.max, sampleCurrency)}
             </div>
           </div>
           <div>
-            <div className="text-muted-foreground">
+            <div className="text-sm text-muted-foreground md:text-base">
               Tháng trả thấp nhất (&gt;0)
             </div>
-            <div className="mt-0.5 font-semibold tabular-nums text-foreground">
+            <div className="mt-1 text-lg font-semibold tabular-nums text-foreground md:text-xl">
               {trendFooter.min > 0
                 ? formatMoney(trendFooter.min, sampleCurrency)
                 : "—"}
