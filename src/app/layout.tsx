@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Plus_Jakarta_Sans } from "next/font/google";
 import "./globals.css";
 import { AppProviders } from "@/App/providers";
+import { GoogleAnalytics } from "@/shared/components/GoogleAnalytics";
 
 const plusJakarta = Plus_Jakarta_Sans({
   variable: "--font-plus-jakarta",
@@ -23,6 +24,7 @@ export default function RootLayout({
     <html lang="vi" className={`${plusJakarta.variable} h-full antialiased`}>
       <body className="min-h-full flex flex-col font-sans">
         <AppProviders>{children}</AppProviders>
+        <GoogleAnalytics />
       </body>
     </html>
   );

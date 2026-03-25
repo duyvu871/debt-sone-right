@@ -18,6 +18,7 @@ Hoặc `make env` (chỉ tạo nếu `.env` chưa có).
 | `DEBT_APP_PASSWORD` | Mật khẩu mọi thao tác ghi trên UI. |
 | `TENANT_ID` | *(Tuỳ chọn)* UUID `Organization`; bỏ trống = org đầu tiên. |
 | `DATABASE_SSL_REJECT_UNAUTHORIZED` | `false` / `0` / `no` nếu TLS lỗi chứng chỉ (ưu tiên CA đúng trên production). |
+| `NEXT_PUBLIC_GA_MEASUREMENT_ID` | *(Tuỳ chọn)* GA4 Measurement ID (`G-…`); bỏ trống = không bật Google Analytics. |
 | `DIRECT_DATABASE_URL` | *(Tuỳ chọn)* Shadow DB cho `prisma migrate dev`. |
 | `POSTGRES_*` | Dùng cho **Docker Compose** (đọc từ `.env` cùng `docker-compose.yml`). |
 
