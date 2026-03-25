@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import {
   AlertCircle,
   Pencil,
@@ -11,25 +11,25 @@ import {
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { deleteRepaymentAction } from "@/features/repayment/actions/deleteRepaymentAction";
-import { updateRepaymentAction } from "@/features/repayment/actions/updateRepaymentAction";
+import { useDeleteRepayment } from "@/features/repayment/hooks/useDeleteRepayment";
+import { useUpdateRepayment } from "@/features/repayment/hooks/useUpdateRepayment";
 import { cn } from "@/lib/utils";
 import { Breadcrumb } from "@/shared/components/Breadcrumb";
 import { EmptyState } from "@/shared/components/EmptyState";
 import { FormAlert } from "@/shared/components/FormAlert";
 import { ListPageToolbar } from "@/shared/components/ListPageToolbar";
+import { MutationSubmitButton } from "@/shared/components/MutationSubmitButton";
 import { PageShell } from "@/shared/components/PageShell";
-import { PasswordField } from "@/shared/components/PasswordField";
 import type { RepaymentListItemWithCreditorId } from "@/shared/dal/repaymentDal";
 import { formatMoney, mapErr } from "@/shared/lib/format";
 import { formFull, formGrid, selectClass } from "@/shared/lib/formClasses";
-import { invalidateLedgerQueries } from "@/shared/lib/invalidateLedgerQueries";
 import { matchesSearch } from "@/shared/lib/listFilter";
 import { BottomSheet } from "@/shared/ui/bottom-sheet";
 import { Button } from "@/shared/ui/button";
 import FadeContent from "@/shared/ui/fade-content";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
+import { MoneyInput } from "@/shared/ui/money-input";
 import {
   Table,
   TableBody,
@@ -40,7 +40,10 @@ import {
 } from "@/shared/ui/table";
 
 export function RepaymentListPage() {
-  const qc = useQueryClient();
+  const updateRepayment = useUpdateRepayment();
+  const deleteRepayment = useDeleteRepayment();
+  const repayEditPending =
+    updateRepayment.isPending || deleteRepayment.isPending;
   const [sheet, setSheet] = useState<null | "repay-edit" | "repay-delete">(
     null,
   );
@@ -49,7 +52,6 @@ export function RepaymentListPage() {
   const clearEditsAfterCloseRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
-  const [formError, setFormError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [currencyFilter, setCurrencyFilter] = useState<"ALL" | "VND" | "USD">(
     "ALL",
@@ -85,8 +87,9 @@ export function RepaymentListPage() {
     },
   });
 
-  async function invalidate() {
-    await invalidateLedgerQueries(qc);
+  function resetRepayMutations() {
+    updateRepayment.reset();
+    deleteRepayment.reset();
   }
 
   const filtered = useMemo(() => {
@@ -105,8 +108,8 @@ export function RepaymentListPage() {
       clearTimeout(clearEditsAfterCloseRef.current);
       clearEditsAfterCloseRef.current = null;
     }
+    resetRepayMutations();
     setSheet(null);
-    setFormError(null);
     clearEditsAfterCloseRef.current = setTimeout(() => {
       clearEditsAfterCloseRef.current = null;
       setEditRepay(null);
@@ -192,7 +195,7 @@ export function RepaymentListPage() {
             }
           />
           <p className="text-xs text-muted-foreground">
-            Sửa / xóa cần mật khẩu.
+            Sửa / xóa cần xác thực (một lần mỗi giờ).
           </p>
           {data.length === 0 ? (
             <EmptyState
@@ -236,6 +239,7 @@ export function RepaymentListPage() {
                           size="sm"
                           className="w-full cursor-pointer gap-1"
                           onClick={() => {
+                            resetRepayMutations();
                             setEditRepay(r);
                             setSheet("repay-edit");
                           }}
@@ -249,6 +253,7 @@ export function RepaymentListPage() {
                           size="sm"
                           className="w-full cursor-pointer gap-1 border-destructive/40 text-destructive hover:bg-destructive/10"
                           onClick={() => {
+                            resetRepayMutations();
                             setEditRepay(r);
                             setSheet("repay-delete");
                           }}
@@ -329,6 +334,7 @@ export function RepaymentListPage() {
                               size="sm"
                               className="cursor-pointer gap-1"
                               onClick={() => {
+                                resetRepayMutations();
                                 setEditRepay(r);
                                 setSheet("repay-edit");
                               }}
@@ -342,6 +348,7 @@ export function RepaymentListPage() {
                               size="sm"
                               className="cursor-pointer gap-1 border-destructive/40 text-destructive hover:bg-destructive/10"
                               onClick={() => {
+                                resetRepayMutations();
                                 setEditRepay(r);
                                 setSheet("repay-delete");
                               }}
@@ -369,18 +376,14 @@ export function RepaymentListPage() {
         {editRepay ? (
           <form
             className={formGrid}
-            onSubmit={async (e) => {
+            autoComplete="off"
+            onSubmit={(e) => {
               e.preventDefault();
-              setFormError(null);
-              try {
-                const fd = new FormData(e.currentTarget);
-                fd.set("id", editRepay.id);
-                await updateRepaymentAction(fd);
-                await invalidate();
-                closeSheet();
-              } catch (err) {
-                setFormError(mapErr(err));
-              }
+              const fd = new FormData(e.currentTarget);
+              fd.set("id", editRepay.id);
+              updateRepayment.mutate(fd, {
+                onSuccess: () => closeSheet(),
+              });
             }}
           >
             <input type="hidden" name="id" value={editRepay.id} />
@@ -394,15 +397,17 @@ export function RepaymentListPage() {
                 defaultValue={new Date(editRepay.happenedAt)
                   .toISOString()
                   .slice(0, 16)}
+                disabled={repayEditPending}
               />
             </div>
             <div className="grid gap-1.5">
               <Label htmlFor="rl-amt">Số tiền</Label>
-              <Input
+              <MoneyInput
                 id="rl-amt"
                 name="deltaAmount"
                 required
                 defaultValue={editRepay.deltaAmount}
+                disabled={repayEditPending}
               />
             </div>
             <div className="grid gap-1.5">
@@ -412,6 +417,7 @@ export function RepaymentListPage() {
                 name="note"
                 required
                 defaultValue={editRepay.note}
+                disabled={repayEditPending}
               />
             </div>
             <div className="grid gap-1.5">
@@ -420,15 +426,21 @@ export function RepaymentListPage() {
                 id="rl-proof"
                 name="proofUrl"
                 defaultValue={editRepay.proofUrl}
+                disabled={repayEditPending}
               />
             </div>
-            <PasswordField id="rl-pw" className={formFull} />
-            {formError ? (
-              <FormAlert className={formFull}>{formError}</FormAlert>
+            {updateRepayment.error ? (
+              <FormAlert className={formFull}>
+                {mapErr(updateRepayment.error)}
+              </FormAlert>
             ) : null}
-            <Button type="submit" className={cn(formFull, "cursor-pointer")}>
+            <MutationSubmitButton
+              pending={updateRepayment.isPending}
+              pendingLabel="Đang cập nhật…"
+              className={cn(formFull, "cursor-pointer")}
+            >
               Cập nhật
-            </Button>
+            </MutationSubmitButton>
           </form>
         ) : null}
       </BottomSheet>
@@ -441,7 +453,7 @@ export function RepaymentListPage() {
         {editRepay ? (
           <>
             <p className="mb-3 text-sm text-muted-foreground">
-              Hành động này không hoàn tác. Nhập mật khẩu để xác nhận.
+              Hành động này không hoàn tác. Xác nhận để xóa.
             </p>
             <div className="mb-4 rounded-xl border border-white/60 bg-white/45 px-3 py-2 text-sm dark:border-white/10 dark:bg-white/5">
               <div className="font-medium">{editRepay.creditorName}</div>
@@ -457,32 +469,30 @@ export function RepaymentListPage() {
             </div>
             <form
               className={formGrid}
-              onSubmit={async (e) => {
+              autoComplete="off"
+              onSubmit={(e) => {
                 e.preventDefault();
-                setFormError(null);
-                try {
-                  const fd = new FormData(e.currentTarget);
-                  fd.set("id", editRepay.id);
-                  await deleteRepaymentAction(fd);
-                  await invalidate();
-                  closeSheet();
-                } catch (err) {
-                  setFormError(mapErr(err));
-                }
+                const fd = new FormData(e.currentTarget);
+                fd.set("id", editRepay.id);
+                deleteRepayment.mutate(fd, {
+                  onSuccess: () => closeSheet(),
+                });
               }}
             >
               <input type="hidden" name="id" value={editRepay.id} />
-              <PasswordField id="rld-pw" className={formFull} />
-              {formError ? (
-                <FormAlert className={formFull}>{formError}</FormAlert>
+              {deleteRepayment.error ? (
+                <FormAlert className={formFull}>
+                  {mapErr(deleteRepayment.error)}
+                </FormAlert>
               ) : null}
-              <Button
-                type="submit"
+              <MutationSubmitButton
+                pending={deleteRepayment.isPending}
+                pendingLabel="Đang xóa…"
                 variant="destructive"
                 className={cn(formFull, "cursor-pointer")}
               >
                 Xóa vĩnh viễn
-              </Button>
+              </MutationSubmitButton>
             </form>
           </>
         ) : null}

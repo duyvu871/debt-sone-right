@@ -1,31 +1,31 @@
 "use client";
 
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { AlertCircle, ExternalLink, Pencil, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
-import { deleteRepaymentAction } from "@/features/repayment/actions/deleteRepaymentAction";
-import { updateRepaymentAction } from "@/features/repayment/actions/updateRepaymentAction";
+import { useDeleteRepayment } from "@/features/repayment/hooks/useDeleteRepayment";
+import { useUpdateRepayment } from "@/features/repayment/hooks/useUpdateRepayment";
 import { cn } from "@/lib/utils";
 import { Breadcrumb } from "@/shared/components/Breadcrumb";
 import { DetailHeader } from "@/shared/components/DetailHeader";
 import { EmptyState } from "@/shared/components/EmptyState";
 import { FormAlert } from "@/shared/components/FormAlert";
 import { InfoGrid, type InfoItem } from "@/shared/components/InfoGrid";
+import { MutationSubmitButton } from "@/shared/components/MutationSubmitButton";
 import { PageShell } from "@/shared/components/PageShell";
-import { PasswordField } from "@/shared/components/PasswordField";
 import type { DebtDTO } from "@/shared/dal/debtDal";
 import type { RepaymentListItemDTO } from "@/shared/dal/repaymentDal";
 import { crumbLabel } from "@/shared/lib/breadcrumbLabels";
 import { formatMoney, mapErr } from "@/shared/lib/format";
 import { formFull, formGrid } from "@/shared/lib/formClasses";
-import { invalidateLedgerQueries } from "@/shared/lib/invalidateLedgerQueries";
 import { BottomSheet } from "@/shared/ui/bottom-sheet";
 import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
+import { MoneyInput } from "@/shared/ui/money-input";
 
 type RepaymentDetailPayload = {
   repayment: RepaymentListItemDTO;
@@ -35,14 +35,16 @@ type RepaymentDetailPayload = {
 
 export function RepaymentDetailPage({ repaymentId }: { repaymentId: string }) {
   const router = useRouter();
-  const qc = useQueryClient();
+  const updateRepayment = useUpdateRepayment();
+  const deleteRepayment = useDeleteRepayment();
+  const repayEditPending =
+    updateRepayment.isPending || deleteRepayment.isPending;
   const [sheet, setSheet] = useState<null | "repay-edit" | "repay-delete">(
     null,
   );
   const clearEditsAfterCloseRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
-  const [formError, setFormError] = useState<string | null>(null);
 
   useEffect(() => {
     return () => {
@@ -68,17 +70,14 @@ export function RepaymentDetailPage({ repaymentId }: { repaymentId: string }) {
     },
   });
 
-  async function invalidate() {
-    await invalidateLedgerQueries(qc);
-  }
-
   function closeSheet() {
     if (clearEditsAfterCloseRef.current) {
       clearTimeout(clearEditsAfterCloseRef.current);
       clearEditsAfterCloseRef.current = null;
     }
+    updateRepayment.reset();
+    deleteRepayment.reset();
     setSheet(null);
-    setFormError(null);
   }
 
   const repayment = data?.repayment;
@@ -238,7 +237,11 @@ export function RepaymentDetailPage({ repaymentId }: { repaymentId: string }) {
               size="icon-sm"
               className="cursor-pointer transition-colors duration-200"
               aria-label="Sửa bản ghi trả nợ"
-              onClick={() => setSheet("repay-edit")}
+              onClick={() => {
+                updateRepayment.reset();
+                deleteRepayment.reset();
+                setSheet("repay-edit");
+              }}
             >
               <Pencil className="size-4" aria-hidden />
             </Button>
@@ -248,7 +251,11 @@ export function RepaymentDetailPage({ repaymentId }: { repaymentId: string }) {
               size="icon-sm"
               className="cursor-pointer border-destructive/40 text-destructive transition-colors duration-200 hover:bg-destructive/10"
               aria-label="Xóa bản ghi trả nợ"
-              onClick={() => setSheet("repay-delete")}
+              onClick={() => {
+                updateRepayment.reset();
+                deleteRepayment.reset();
+                setSheet("repay-delete");
+              }}
             >
               <Trash2 className="size-4" aria-hidden />
             </Button>
@@ -265,19 +272,17 @@ export function RepaymentDetailPage({ repaymentId }: { repaymentId: string }) {
       >
         <form
           className={formGrid}
-          onSubmit={async (e) => {
+          autoComplete="off"
+          onSubmit={(e) => {
             e.preventDefault();
-            setFormError(null);
-            try {
-              const fd = new FormData(e.currentTarget);
-              fd.set("id", repayment.id);
-              await updateRepaymentAction(fd);
-              await invalidate();
-              closeSheet();
-              void refetch();
-            } catch (err) {
-              setFormError(mapErr(err));
-            }
+            const fd = new FormData(e.currentTarget);
+            fd.set("id", repayment.id);
+            updateRepayment.mutate(fd, {
+              onSuccess: () => {
+                closeSheet();
+                void refetch();
+              },
+            });
           }}
         >
           <input type="hidden" name="id" value={repayment.id} />
@@ -291,15 +296,17 @@ export function RepaymentDetailPage({ repaymentId }: { repaymentId: string }) {
               defaultValue={new Date(repayment.happenedAt)
                 .toISOString()
                 .slice(0, 16)}
+              disabled={repayEditPending}
             />
           </div>
           <div className="grid gap-1.5">
             <Label htmlFor="rd-amt">Số tiền</Label>
-            <Input
+            <MoneyInput
               id="rd-amt"
               name="deltaAmount"
               required
               defaultValue={repayment.deltaAmount}
+              disabled={repayEditPending}
             />
           </div>
           <div className="grid gap-1.5">
@@ -309,6 +316,7 @@ export function RepaymentDetailPage({ repaymentId }: { repaymentId: string }) {
               name="note"
               required
               defaultValue={repayment.note}
+              disabled={repayEditPending}
             />
           </div>
           <div className="grid gap-1.5">
@@ -317,15 +325,21 @@ export function RepaymentDetailPage({ repaymentId }: { repaymentId: string }) {
               id="rd-proof"
               name="proofUrl"
               defaultValue={repayment.proofUrl}
+              disabled={repayEditPending}
             />
           </div>
-          <PasswordField id="rd-pw" className={formFull} />
-          {formError ? (
-            <FormAlert className={formFull}>{formError}</FormAlert>
+          {updateRepayment.error ? (
+            <FormAlert className={formFull}>
+              {mapErr(updateRepayment.error)}
+            </FormAlert>
           ) : null}
-          <Button type="submit" className={cn(formFull, "cursor-pointer")}>
+          <MutationSubmitButton
+            pending={updateRepayment.isPending}
+            pendingLabel="Đang cập nhật…"
+            className={cn(formFull, "cursor-pointer")}
+          >
             Cập nhật
-          </Button>
+          </MutationSubmitButton>
         </form>
       </BottomSheet>
 
@@ -336,7 +350,7 @@ export function RepaymentDetailPage({ repaymentId }: { repaymentId: string }) {
       >
         <div className="space-y-3">
           <p className="text-sm text-muted-foreground">
-            Hành động này không hoàn tác. Nhập mật khẩu để xác nhận.
+            Hành động này không hoàn tác. Xác nhận để xóa.
           </p>
           <div className="rounded-xl border border-white/60 bg-white/45 px-3 py-2 text-sm dark:border-white/10 dark:bg-white/5">
             <div className="font-medium">{repayment.creditorName}</div>
@@ -347,33 +361,33 @@ export function RepaymentDetailPage({ repaymentId }: { repaymentId: string }) {
           </div>
           <form
             className={formGrid}
-            onSubmit={async (e) => {
+            autoComplete="off"
+            onSubmit={(e) => {
               e.preventDefault();
-              setFormError(null);
-              try {
-                const fd = new FormData(e.currentTarget);
-                fd.set("id", repayment.id);
-                await deleteRepaymentAction(fd);
-                await invalidate();
-                closeSheet();
-                router.push("/repayments");
-              } catch (err) {
-                setFormError(mapErr(err));
-              }
+              const fd = new FormData(e.currentTarget);
+              fd.set("id", repayment.id);
+              deleteRepayment.mutate(fd, {
+                onSuccess: () => {
+                  closeSheet();
+                  router.push("/repayments");
+                },
+              });
             }}
           >
             <input type="hidden" name="id" value={repayment.id} />
-            <PasswordField id="rdd-pw" className={formFull} />
-            {formError ? (
-              <FormAlert className={formFull}>{formError}</FormAlert>
+            {deleteRepayment.error ? (
+              <FormAlert className={formFull}>
+                {mapErr(deleteRepayment.error)}
+              </FormAlert>
             ) : null}
-            <Button
-              type="submit"
+            <MutationSubmitButton
+              pending={deleteRepayment.isPending}
+              pendingLabel="Đang xóa…"
               variant="destructive"
               className={cn(formFull, "cursor-pointer")}
             >
               Xóa vĩnh viễn
-            </Button>
+            </MutationSubmitButton>
           </form>
         </div>
       </BottomSheet>

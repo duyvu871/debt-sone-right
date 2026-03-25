@@ -1,14 +1,14 @@
 "use client";
 
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { AlertCircle, Banknote, Pencil } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { CreditorAvatar } from "@/entities/creditor/CreditorAvatar";
-import { deleteCreditorAction } from "@/features/creditor/actions/deleteCreditorAction";
-import { updateCreditorAction } from "@/features/creditor/actions/updateCreditorAction";
+import { useDeleteCreditor } from "@/features/creditor/hooks/useDeleteCreditor";
+import { useUpdateCreditor } from "@/features/creditor/hooks/useUpdateCreditor";
 import { cn } from "@/lib/utils";
 import { Breadcrumb } from "@/shared/components/Breadcrumb";
 import { DetailHeader } from "@/shared/components/DetailHeader";
@@ -16,14 +16,13 @@ import { EmptyState } from "@/shared/components/EmptyState";
 import { FormAlert } from "@/shared/components/FormAlert";
 import { InfoGrid } from "@/shared/components/InfoGrid";
 import { ListPageToolbar } from "@/shared/components/ListPageToolbar";
+import { MutationSubmitButton } from "@/shared/components/MutationSubmitButton";
 import { PageShell } from "@/shared/components/PageShell";
-import { PasswordField } from "@/shared/components/PasswordField";
 import type { CreditorDTO } from "@/shared/dal/creditorDal";
 import type { DebtDTO } from "@/shared/dal/debtDal";
 import { crumbLabel } from "@/shared/lib/breadcrumbLabels";
 import { debtStatusLabel, formatMoney, mapErr } from "@/shared/lib/format";
 import { formFull, formGrid, selectClass } from "@/shared/lib/formClasses";
-import { invalidateLedgerQueries } from "@/shared/lib/invalidateLedgerQueries";
 import { matchesSearch } from "@/shared/lib/listFilter";
 import { Badge } from "@/shared/ui/badge";
 import { BottomSheet } from "@/shared/ui/bottom-sheet";
@@ -48,12 +47,14 @@ type CreditorDetailPayload = {
 
 export function CreditorDetailPage({ creditorId }: { creditorId: string }) {
   const router = useRouter();
-  const qc = useQueryClient();
+  const updateCreditor = useUpdateCreditor();
+  const deleteCreditor = useDeleteCreditor();
   const [sheet, setSheet] = useState<null | "creditor-edit">(null);
   const clearEditsAfterCloseRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
-  const [formError, setFormError] = useState<string | null>(null);
+  const editPending =
+    updateCreditor.isPending || deleteCreditor.isPending;
   const [debtSearch, setDebtSearch] = useState("");
   const [debtStatus, setDebtStatus] = useState<"ALL" | DebtDTO["status"]>(
     "ALL",
@@ -83,17 +84,14 @@ export function CreditorDetailPage({ creditorId }: { creditorId: string }) {
     },
   });
 
-  async function invalidate() {
-    await invalidateLedgerQueries(qc);
-  }
-
   function closeSheet() {
     if (clearEditsAfterCloseRef.current) {
       clearTimeout(clearEditsAfterCloseRef.current);
       clearEditsAfterCloseRef.current = null;
     }
+    updateCreditor.reset();
+    deleteCreditor.reset();
     setSheet(null);
-    setFormError(null);
     clearEditsAfterCloseRef.current = setTimeout(() => {
       clearEditsAfterCloseRef.current = null;
     }, 320);
@@ -211,7 +209,11 @@ export function CreditorDetailPage({ creditorId }: { creditorId: string }) {
                 size="icon-sm"
                 className="cursor-pointer"
                 aria-label="Sửa hoặc xóa chủ nợ"
-                onClick={() => setSheet("creditor-edit")}
+                onClick={() => {
+                  updateCreditor.reset();
+                  deleteCreditor.reset();
+                  setSheet("creditor-edit");
+                }}
               >
                 <Pencil className="size-4" aria-hidden />
               </Button>
@@ -381,18 +383,14 @@ export function CreditorDetailPage({ creditorId }: { creditorId: string }) {
           <>
             <form
               className={cn(formGrid, "mb-4")}
-              onSubmit={async (e) => {
+              autoComplete="off"
+              onSubmit={(e) => {
                 e.preventDefault();
-                setFormError(null);
-                try {
-                  const fd = new FormData(e.currentTarget);
-                  fd.set("id", creditor.id);
-                  await updateCreditorAction(fd);
-                  await invalidate();
-                  closeSheet();
-                } catch (err) {
-                  setFormError(mapErr(err));
-                }
+                const fd = new FormData(e.currentTarget);
+                fd.set("id", creditor.id);
+                updateCreditor.mutate(fd, {
+                  onSuccess: () => closeSheet(),
+                });
               }}
             >
               <input type="hidden" name="id" value={creditor.id} />
@@ -403,6 +401,7 @@ export function CreditorDetailPage({ creditorId }: { creditorId: string }) {
                   name="name"
                   required
                   defaultValue={creditor.name}
+                  disabled={editPending}
                 />
               </div>
               <div className="grid gap-1.5">
@@ -411,6 +410,7 @@ export function CreditorDetailPage({ creditorId }: { creditorId: string }) {
                   id="cde-phone"
                   name="phone"
                   defaultValue={creditor.phone ?? ""}
+                  disabled={editPending}
                 />
               </div>
               <div className="grid gap-1.5">
@@ -419,42 +419,51 @@ export function CreditorDetailPage({ creditorId }: { creditorId: string }) {
                   id="cde-note"
                   name="note"
                   defaultValue={creditor.note ?? ""}
+                  disabled={editPending}
                 />
               </div>
-              <PasswordField id="cde-pw" className={formFull} />
-              {formError ? (
-                <FormAlert className={formFull}>{formError}</FormAlert>
+              {updateCreditor.error ? (
+                <FormAlert className={formFull}>
+                  {mapErr(updateCreditor.error)}
+                </FormAlert>
               ) : null}
-              <Button type="submit" className={cn(formFull, "cursor-pointer")}>
+              <MutationSubmitButton
+                pending={updateCreditor.isPending}
+                pendingLabel="Đang cập nhật…"
+                className={cn(formFull, "cursor-pointer")}
+              >
                 Cập nhật
-              </Button>
+              </MutationSubmitButton>
             </form>
             <form
               className={cn(formGrid, "border-t pt-4")}
-              onSubmit={async (e) => {
+              autoComplete="off"
+              onSubmit={(e) => {
                 e.preventDefault();
-                setFormError(null);
-                try {
-                  const fd = new FormData(e.currentTarget);
-                  fd.set("id", creditor.id);
-                  await deleteCreditorAction(fd);
-                  await invalidate();
-                  closeSheet();
-                  router.push("/creditors");
-                } catch (err) {
-                  setFormError(mapErr(err));
-                }
+                const fd = new FormData(e.currentTarget);
+                fd.set("id", creditor.id);
+                deleteCreditor.mutate(fd, {
+                  onSuccess: () => {
+                    closeSheet();
+                    router.push("/creditors");
+                  },
+                });
               }}
             >
               <input type="hidden" name="id" value={creditor.id} />
-              <PasswordField id="cdd-pw" className={formFull} />
-              <Button
-                type="submit"
+              {deleteCreditor.error ? (
+                <FormAlert className={formFull}>
+                  {mapErr(deleteCreditor.error)}
+                </FormAlert>
+              ) : null}
+              <MutationSubmitButton
+                pending={deleteCreditor.isPending}
+                pendingLabel="Đang xóa…"
                 variant="destructive"
                 className={cn(formFull, "cursor-pointer")}
               >
                 Xóa chủ nợ
-              </Button>
+              </MutationSubmitButton>
             </form>
           </>
         ) : null}

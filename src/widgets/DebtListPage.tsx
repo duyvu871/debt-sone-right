@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import {
   AlertCircle,
   Banknote,
@@ -13,23 +13,22 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { CreditorAvatar } from "@/entities/creditor/CreditorAvatar";
-import { appendDebtPrincipalAction } from "@/features/debt/actions/appendDebtPrincipalAction";
-import { createDebtAction } from "@/features/debt/actions/createDebtAction";
-import { deleteDebtAction } from "@/features/debt/actions/deleteDebtAction";
-import { updateDebtAction } from "@/features/debt/actions/updateDebtAction";
-import { createRepaymentAction } from "@/features/repayment/actions/createRepaymentAction";
+import { useAppendDebtPrincipal } from "@/features/debt/hooks/useAppendDebtPrincipal";
+import { useCreateDebt } from "@/features/debt/hooks/useCreateDebt";
+import { useDeleteDebt } from "@/features/debt/hooks/useDeleteDebt";
+import { useUpdateDebt } from "@/features/debt/hooks/useUpdateDebt";
+import { useCreateRepayment } from "@/features/repayment/hooks/useCreateRepayment";
 import { cn } from "@/lib/utils";
 import { Breadcrumb } from "@/shared/components/Breadcrumb";
 import { EmptyState } from "@/shared/components/EmptyState";
 import { FormAlert } from "@/shared/components/FormAlert";
 import { ListPageToolbar } from "@/shared/components/ListPageToolbar";
+import { MutationSubmitButton } from "@/shared/components/MutationSubmitButton";
 import { PageShell } from "@/shared/components/PageShell";
-import { PasswordField } from "@/shared/components/PasswordField";
 import type { CreditorWithDebtCount } from "@/shared/dal/creditorDal";
 import type { DebtDTO } from "@/shared/dal/debtDal";
 import { debtStatusLabel, formatMoney, mapErr } from "@/shared/lib/format";
 import { formFull, formGrid, selectClass } from "@/shared/lib/formClasses";
-import { invalidateLedgerQueries } from "@/shared/lib/invalidateLedgerQueries";
 import { matchesSearch } from "@/shared/lib/listFilter";
 import { Badge } from "@/shared/ui/badge";
 import { BottomSheet } from "@/shared/ui/bottom-sheet";
@@ -37,6 +36,7 @@ import { Button } from "@/shared/ui/button";
 import FadeContent from "@/shared/ui/fade-content";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
+import { MoneyInput } from "@/shared/ui/money-input";
 import {
   Table,
   TableBody,
@@ -49,7 +49,11 @@ import {
 type DebtRow = DebtDTO & { outstanding: number; repaid: number };
 
 export function DebtListPage() {
-  const qc = useQueryClient();
+  const createDebt = useCreateDebt();
+  const updateDebt = useUpdateDebt();
+  const deleteDebt = useDeleteDebt();
+  const appendDebtPrincipal = useAppendDebtPrincipal();
+  const createRepayment = useCreateRepayment();
   const [sheet, setSheet] = useState<
     null | "debt-create" | "debt-edit" | "debt-append" | "debt-repay"
   >(null);
@@ -57,7 +61,7 @@ export function DebtListPage() {
   const clearEditsAfterCloseRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
-  const [formError, setFormError] = useState<string | null>(null);
+  const editDebtPending = updateDebt.isPending || deleteDebt.isPending;
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"ALL" | DebtDTO["status"]>(
     "ALL",
@@ -125,8 +129,12 @@ export function DebtListPage() {
     });
   }, [data, search, statusFilter, currencyFilter]);
 
-  async function invalidate() {
-    await invalidateLedgerQueries(qc);
+  function resetDebtMutations() {
+    createDebt.reset();
+    updateDebt.reset();
+    deleteDebt.reset();
+    appendDebtPrincipal.reset();
+    createRepayment.reset();
   }
 
   function closeSheet() {
@@ -134,8 +142,8 @@ export function DebtListPage() {
       clearTimeout(clearEditsAfterCloseRef.current);
       clearEditsAfterCloseRef.current = null;
     }
+    resetDebtMutations();
     setSheet(null);
-    setFormError(null);
     clearEditsAfterCloseRef.current = setTimeout(() => {
       clearEditsAfterCloseRef.current = null;
       setEditDebt(null);
@@ -264,7 +272,10 @@ export function DebtListPage() {
                     type="button"
                     size="sm"
                     className="cursor-pointer shadow-sm"
-                    onClick={() => setSheet("debt-create")}
+                    onClick={() => {
+                      resetDebtMutations();
+                      setSheet("debt-create");
+                    }}
                     title={
                       !creditors?.length
                         ? "Thêm ít nhất một chủ nợ trước"
@@ -277,7 +288,7 @@ export function DebtListPage() {
               }
             />
             <p className="text-xs text-muted-foreground">
-              CRUD và ghi trả có mật khẩu.
+              CRUD và ghi trả cần xác thực (một lần mỗi giờ).
             </p>
             {data.length === 0 ? (
               <EmptyState
@@ -289,7 +300,10 @@ export function DebtListPage() {
                     type="button"
                     size="sm"
                     className="cursor-pointer"
-                    onClick={() => setSheet("debt-create")}
+                    onClick={() => {
+                      resetDebtMutations();
+                      setSheet("debt-create");
+                    }}
                   >
                     Thêm khoản nợ
                   </Button>
@@ -358,6 +372,7 @@ export function DebtListPage() {
                             size="sm"
                             className="w-full cursor-pointer gap-1"
                             onClick={() => {
+                              resetDebtMutations();
                               setEditDebt(d);
                               setSheet("debt-edit");
                             }}
@@ -377,6 +392,7 @@ export function DebtListPage() {
                                 : undefined
                             }
                             onClick={() => {
+                              resetDebtMutations();
                               setEditDebt(d);
                               setSheet("debt-repay");
                             }}
@@ -393,6 +409,7 @@ export function DebtListPage() {
                             size="sm"
                             className="col-span-2 w-full cursor-pointer gap-1"
                             onClick={() => {
+                              resetDebtMutations();
                               setEditDebt(d);
                               setSheet("debt-append");
                             }}
@@ -479,6 +496,7 @@ export function DebtListPage() {
                                   size="sm"
                                   className="cursor-pointer gap-1"
                                   onClick={() => {
+                                    resetDebtMutations();
                                     setEditDebt(d);
                                     setSheet("debt-edit");
                                   }}
@@ -492,6 +510,7 @@ export function DebtListPage() {
                                   size="sm"
                                   className="cursor-pointer gap-1"
                                   onClick={() => {
+                                    resetDebtMutations();
                                     setEditDebt(d);
                                     setSheet("debt-append");
                                   }}
@@ -514,6 +533,7 @@ export function DebtListPage() {
                                       : undefined
                                   }
                                   onClick={() => {
+                                    resetDebtMutations();
                                     setEditDebt(d);
                                     setSheet("debt-repay");
                                   }}
@@ -545,16 +565,12 @@ export function DebtListPage() {
       >
         <form
           className={formGrid}
-          onSubmit={async (e) => {
+          autoComplete="off"
+          onSubmit={(e) => {
             e.preventDefault();
-            setFormError(null);
-            try {
-              await createDebtAction(new FormData(e.currentTarget));
-              await invalidate();
-              closeSheet();
-            } catch (err) {
-              setFormError(mapErr(err));
-            }
+            createDebt.mutate(new FormData(e.currentTarget), {
+              onSuccess: () => closeSheet(),
+            });
           }}
         >
           <div className={cn("grid gap-1.5", formFull)}>
@@ -565,6 +581,7 @@ export function DebtListPage() {
               required
               className={selectClass}
               defaultValue=""
+              disabled={createDebt.isPending}
             >
               <option value="" disabled>
                 Chọn…
@@ -578,11 +595,21 @@ export function DebtListPage() {
           </div>
           <div className="grid gap-1.5">
             <Label htmlFor="d-amt">Số tiền gốc</Label>
-            <Input id="d-amt" name="totalAmount" required />
+            <MoneyInput
+              id="d-amt"
+              name="totalAmount"
+              required
+              disabled={createDebt.isPending}
+            />
           </div>
           <div className="grid gap-1.5">
             <Label htmlFor="d-cur">Tiền tệ</Label>
-            <select id="d-cur" name="currency" className={selectClass}>
+            <select
+              id="d-cur"
+              name="currency"
+              className={selectClass}
+              disabled={createDebt.isPending}
+            >
               <option value="VND">VND</option>
               <option value="USD">USD</option>
             </select>
@@ -595,6 +622,7 @@ export function DebtListPage() {
               type="datetime-local"
               defaultValue={new Date().toISOString().slice(0, 16)}
               required
+              disabled={createDebt.isPending}
             />
           </div>
           <div className="grid gap-1.5">
@@ -605,23 +633,34 @@ export function DebtListPage() {
               type="datetime-local"
               defaultValue={new Date().toISOString().slice(0, 16)}
               required
+              disabled={createDebt.isPending}
             />
           </div>
           <div className={cn("grid gap-1.5", formFull)}>
             <Label htmlFor="d-st">Trạng thái</Label>
-            <select id="d-st" name="status" className={selectClass}>
+            <select
+              id="d-st"
+              name="status"
+              className={selectClass}
+              disabled={createDebt.isPending}
+            >
               <option value="OPEN">OPEN</option>
               <option value="COMPLETED">COMPLETED</option>
               <option value="OVERDUE">OVERDUE</option>
             </select>
           </div>
-          <PasswordField id="d-pw" className={formFull} />
-          {formError ? (
-            <FormAlert className={formFull}>{formError}</FormAlert>
+          {createDebt.error ? (
+            <FormAlert className={formFull}>
+              {mapErr(createDebt.error)}
+            </FormAlert>
           ) : null}
-          <Button type="submit" className={cn(formFull, "cursor-pointer")}>
+          <MutationSubmitButton
+            pending={createDebt.isPending}
+            pendingLabel="Đang lưu…"
+            className={cn(formFull, "cursor-pointer")}
+          >
             Lưu
-          </Button>
+          </MutationSubmitButton>
         </form>
       </BottomSheet>
 
@@ -634,18 +673,14 @@ export function DebtListPage() {
           <>
             <form
               className={cn(formGrid, "mb-4")}
-              onSubmit={async (e) => {
+              autoComplete="off"
+              onSubmit={(e) => {
                 e.preventDefault();
-                setFormError(null);
-                try {
-                  const fd = new FormData(e.currentTarget);
-                  fd.set("id", editDebt.id);
-                  await updateDebtAction(fd);
-                  await invalidate();
-                  closeSheet();
-                } catch (err) {
-                  setFormError(mapErr(err));
-                }
+                const fd = new FormData(e.currentTarget);
+                fd.set("id", editDebt.id);
+                updateDebt.mutate(fd, {
+                  onSuccess: () => closeSheet(),
+                });
               }}
             >
               <input type="hidden" name="id" value={editDebt.id} />
@@ -657,6 +692,7 @@ export function DebtListPage() {
                   required
                   className={selectClass}
                   defaultValue={editDebt.creditorId}
+                  disabled={editDebtPending}
                 >
                   {creditors.map((c) => (
                     <option key={c.id} value={c.id}>
@@ -667,11 +703,12 @@ export function DebtListPage() {
               </div>
               <div className="grid gap-1.5">
                 <Label htmlFor="de-amt">Số tiền gốc</Label>
-                <Input
+                <MoneyInput
                   id="de-amt"
                   name="totalAmount"
                   required
                   defaultValue={editDebt.totalAmount}
+                  disabled={editDebtPending}
                 />
               </div>
               <div className="grid gap-1.5">
@@ -681,6 +718,7 @@ export function DebtListPage() {
                   name="currency"
                   className={selectClass}
                   defaultValue={editDebt.currency}
+                  disabled={editDebtPending}
                 >
                   <option value="VND">VND</option>
                   <option value="USD">USD</option>
@@ -696,6 +734,7 @@ export function DebtListPage() {
                   defaultValue={new Date(editDebt.occurredAt)
                     .toISOString()
                     .slice(0, 16)}
+                  disabled={editDebtPending}
                 />
               </div>
               <div className="grid gap-1.5">
@@ -708,6 +747,7 @@ export function DebtListPage() {
                   defaultValue={new Date(editDebt.dueAt)
                     .toISOString()
                     .slice(0, 16)}
+                  disabled={editDebtPending}
                 />
               </div>
               <div className={cn("grid gap-1.5", formFull)}>
@@ -717,45 +757,52 @@ export function DebtListPage() {
                   name="status"
                   className={selectClass}
                   defaultValue={editDebt.status}
+                  disabled={editDebtPending}
                 >
                   <option value="OPEN">OPEN</option>
                   <option value="COMPLETED">COMPLETED</option>
                   <option value="OVERDUE">OVERDUE</option>
                 </select>
               </div>
-              <PasswordField id="de-pw" className={formFull} />
-              {formError ? (
-                <FormAlert className={formFull}>{formError}</FormAlert>
+              {updateDebt.error ? (
+                <FormAlert className={formFull}>
+                  {mapErr(updateDebt.error)}
+                </FormAlert>
               ) : null}
-              <Button type="submit" className={cn(formFull, "cursor-pointer")}>
+              <MutationSubmitButton
+                pending={updateDebt.isPending}
+                pendingLabel="Đang cập nhật…"
+                className={cn(formFull, "cursor-pointer")}
+              >
                 Cập nhật khoản nợ
-              </Button>
+              </MutationSubmitButton>
             </form>
             <form
               className={cn(formGrid, "mt-4 border-t pt-4")}
-              onSubmit={async (e) => {
+              autoComplete="off"
+              onSubmit={(e) => {
                 e.preventDefault();
-                setFormError(null);
-                try {
-                  const fd = new FormData(e.currentTarget);
-                  fd.set("id", editDebt.id);
-                  await deleteDebtAction(fd);
-                  await invalidate();
-                  closeSheet();
-                } catch (err) {
-                  setFormError(mapErr(err));
-                }
+                const fd = new FormData(e.currentTarget);
+                fd.set("id", editDebt.id);
+                deleteDebt.mutate(fd, {
+                  onSuccess: () => closeSheet(),
+                });
               }}
             >
               <input type="hidden" name="id" value={editDebt.id} />
-              <PasswordField id="dd-pw" className={formFull} />
-              <Button
-                type="submit"
+              {deleteDebt.error ? (
+                <FormAlert className={formFull}>
+                  {mapErr(deleteDebt.error)}
+                </FormAlert>
+              ) : null}
+              <MutationSubmitButton
+                pending={deleteDebt.isPending}
+                pendingLabel="Đang xóa…"
                 variant="destructive"
                 className={cn(formFull, "cursor-pointer")}
               >
                 Xóa khoản nợ
-              </Button>
+              </MutationSubmitButton>
             </form>
           </>
         ) : null}
@@ -793,18 +840,14 @@ export function DebtListPage() {
             </div>
             <form
               className={formGrid}
-              onSubmit={async (e) => {
+              autoComplete="off"
+              onSubmit={(e) => {
                 e.preventDefault();
-                setFormError(null);
-                try {
-                  const fd = new FormData(e.currentTarget);
-                  fd.set("debtId", editDebt.id);
-                  await appendDebtPrincipalAction(fd);
-                  await invalidate();
-                  closeSheet();
-                } catch (err) {
-                  setFormError(mapErr(err));
-                }
+                const fd = new FormData(e.currentTarget);
+                fd.set("debtId", editDebt.id);
+                appendDebtPrincipal.mutate(fd, {
+                  onSuccess: () => closeSheet(),
+                });
               }}
             >
               <input type="hidden" name="debtId" value={editDebt.id} />
@@ -812,22 +855,26 @@ export function DebtListPage() {
                 <Label htmlFor="dla-amt">
                   Số tiền bổ sung ({editDebt.currency})
                 </Label>
-                <Input
+                <MoneyInput
                   id="dla-amt"
                   name="additionalAmount"
-                  inputMode="decimal"
                   required
                   placeholder="Ví dụ: 5000000"
-                  autoComplete="off"
+                  disabled={appendDebtPrincipal.isPending}
                 />
               </div>
-              <PasswordField id="dla-pw" className={formFull} />
-              {formError ? (
-                <FormAlert className={formFull}>{formError}</FormAlert>
+              {appendDebtPrincipal.error ? (
+                <FormAlert className={formFull}>
+                  {mapErr(appendDebtPrincipal.error)}
+                </FormAlert>
               ) : null}
-              <Button type="submit" className={cn(formFull, "cursor-pointer")}>
+              <MutationSubmitButton
+                pending={appendDebtPrincipal.isPending}
+                pendingLabel="Đang cập nhật…"
+                className={cn(formFull, "cursor-pointer")}
+              >
                 Cập nhật gốc
-              </Button>
+              </MutationSubmitButton>
             </form>
           </>
         ) : null}
@@ -851,18 +898,14 @@ export function DebtListPage() {
             </div>
             <form
               className={formGrid}
-              onSubmit={async (e) => {
+              autoComplete="off"
+              onSubmit={(e) => {
                 e.preventDefault();
-                setFormError(null);
-                try {
-                  const fd = new FormData(e.currentTarget);
-                  fd.set("debtId", editDebt.id);
-                  await createRepaymentAction(fd);
-                  await invalidate();
-                  closeSheet();
-                } catch (err) {
-                  setFormError(mapErr(err));
-                }
+                const fd = new FormData(e.currentTarget);
+                fd.set("debtId", editDebt.id);
+                createRepayment.mutate(fd, {
+                  onSuccess: () => closeSheet(),
+                });
               }}
             >
               <input type="hidden" name="debtId" value={editDebt.id} />
@@ -874,27 +917,47 @@ export function DebtListPage() {
                   type="datetime-local"
                   defaultValue={new Date().toISOString().slice(0, 16)}
                   required
+                  disabled={createRepayment.isPending}
                 />
               </div>
               <div className="grid gap-1.5">
                 <Label htmlFor="dr-amt">Số tiền trả</Label>
-                <Input id="dr-amt" name="deltaAmount" required />
+                <MoneyInput
+                  id="dr-amt"
+                  name="deltaAmount"
+                  required
+                  disabled={createRepayment.isPending}
+                />
               </div>
               <div className="grid gap-1.5">
                 <Label htmlFor="dr-note">Ghi chú</Label>
-                <Input id="dr-note" name="note" required />
+                <Input
+                  id="dr-note"
+                  name="note"
+                  required
+                  disabled={createRepayment.isPending}
+                />
               </div>
               <div className="grid gap-1.5">
                 <Label htmlFor="dr-proof">Link chứng từ (tuỳ chọn)</Label>
-                <Input id="dr-proof" name="proofUrl" />
+                <Input
+                  id="dr-proof"
+                  name="proofUrl"
+                  disabled={createRepayment.isPending}
+                />
               </div>
-              <PasswordField id="dr-pw" className={formFull} />
-              {formError ? (
-                <FormAlert className={formFull}>{formError}</FormAlert>
+              {createRepayment.error ? (
+                <FormAlert className={formFull}>
+                  {mapErr(createRepayment.error)}
+                </FormAlert>
               ) : null}
-              <Button type="submit" className={cn(formFull, "cursor-pointer")}>
+              <MutationSubmitButton
+                pending={createRepayment.isPending}
+                pendingLabel="Đang ghi nhận…"
+                className={cn(formFull, "cursor-pointer")}
+              >
                 Ghi nhận trả nợ
-              </Button>
+              </MutationSubmitButton>
             </form>
           </>
         ) : null}

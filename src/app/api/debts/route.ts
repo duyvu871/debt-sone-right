@@ -1,6 +1,11 @@
+import { createDebt } from "@/shared/dal/debtDal";
 import { listDebts } from "@/shared/dal/debtDal";
 import { listRepaymentRecords } from "@/shared/dal/repaymentDal";
 import { paidByDebtMap } from "@/shared/lib/buildLedgerStats";
+import { formDataToRecord } from "@/shared/lib/formDataToRecord";
+import { mutationRouteErrorResponse } from "@/shared/lib/mutationRouteError";
+import { requireMutationSession } from "@/shared/lib/requireMutationSession";
+import { createDebtSchema } from "@/shared/schemas/debt";
 
 export async function GET() {
   try {
@@ -18,5 +23,18 @@ export async function GET() {
   } catch (e) {
     const message = e instanceof Error ? e.message : "Server error";
     return Response.json({ error: message }, { status: 500 });
+  }
+}
+
+export async function POST(req: Request) {
+  const denied = await requireMutationSession();
+  if (denied) return denied;
+  try {
+    const fd = await req.formData();
+    const parsed = createDebtSchema.parse(formDataToRecord(fd));
+    await createDebt(parsed);
+    return Response.json({ ok: true });
+  } catch (e) {
+    return mutationRouteErrorResponse(e);
   }
 }

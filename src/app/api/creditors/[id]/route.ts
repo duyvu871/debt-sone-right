@@ -1,7 +1,15 @@
-import { getCreditorById } from "@/shared/dal/creditorDal";
+import {
+  deleteCreditorById,
+  getCreditorById,
+  updateCreditor,
+} from "@/shared/dal/creditorDal";
 import { listDebtsByCreditorId } from "@/shared/dal/debtDal";
 import { listRepaymentRecords } from "@/shared/dal/repaymentDal";
 import { paidByDebtMap } from "@/shared/lib/buildLedgerStats";
+import { formDataToRecord } from "@/shared/lib/formDataToRecord";
+import { mutationRouteErrorResponse } from "@/shared/lib/mutationRouteError";
+import { requireMutationSession } from "@/shared/lib/requireMutationSession";
+import { updateCreditorSchema } from "@/shared/schemas/creditor";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -26,5 +34,35 @@ export async function GET(_req: Request, ctx: RouteContext) {
   } catch (e) {
     const message = e instanceof Error ? e.message : "Server error";
     return Response.json({ error: message }, { status: 500 });
+  }
+}
+
+export async function PATCH(req: Request, ctx: RouteContext) {
+  const denied = await requireMutationSession();
+  if (denied) return denied;
+  try {
+    const { id } = await ctx.params;
+    const fd = await req.formData();
+    const raw = formDataToRecord(fd);
+    if (raw.id !== id) {
+      return Response.json({ error: "id_mismatch" }, { status: 400 });
+    }
+    const parsed = updateCreditorSchema.parse(raw);
+    await updateCreditor(parsed);
+    return Response.json({ ok: true });
+  } catch (e) {
+    return mutationRouteErrorResponse(e);
+  }
+}
+
+export async function DELETE(_req: Request, ctx: RouteContext) {
+  const denied = await requireMutationSession();
+  if (denied) return denied;
+  try {
+    const { id } = await ctx.params;
+    await deleteCreditorById(id);
+    return Response.json({ ok: true });
+  } catch (e) {
+    return mutationRouteErrorResponse(e);
   }
 }

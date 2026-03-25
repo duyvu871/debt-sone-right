@@ -76,4 +76,4 @@ Xem [`../ecosystem.config.cjs`](../ecosystem.config.cjs). Log: `npx pm2 logs deb
 
 ## API
 
-- `GET /api/ledger` — đọc công khai. Ghi qua Server Actions + `mutationPassword`.
+- `GET /api/ledger` — đọc công khai. Ghi qua các route `POST`/`PATCH`/`DELETE` dưới `/api/creditors`, `/api/debts`, `/api/repayments` (và `POST .../append-principal`) sau khi xác thực (`POST /api/auth/mutation-password` đặt cookie phiên 1 giờ).

@@ -204,3 +204,12 @@
     @apply border border-white/60 bg-white/50 shadow-inner backdrop-blur-md dark:border-white/10 dark:bg-white/5;
   }
 }
+
+@keyframes global-loading-slide {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(400%);
+  }
+}

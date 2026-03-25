@@ -1,7 +1,6 @@
 import { z } from "zod";
 
 export const createCreditorSchema = z.object({
-  mutationPassword: z.string().min(1),
   name: z.string().min(1),
   phone: z
     .string()
@@ -14,7 +13,6 @@ export const createCreditorSchema = z.object({
 });
 
 export const updateCreditorSchema = z.object({
-  mutationPassword: z.string().min(1),
   id: z.string().min(1),
   name: z.string().min(1),
   phone: z
@@ -28,6 +26,5 @@ export const updateCreditorSchema = z.object({
 });
 
 export const deleteCreditorSchema = z.object({
-  mutationPassword: z.string().min(1),
   id: z.string().min(1),
 });

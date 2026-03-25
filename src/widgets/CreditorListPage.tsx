@@ -1,28 +1,27 @@
 "use client";
 
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { AlertCircle, RefreshCw, Users } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { CreditorAvatar } from "@/entities/creditor/CreditorAvatar";
-import { createCreditorAction } from "@/features/creditor/actions/createCreditorAction";
-import { deleteCreditorAction } from "@/features/creditor/actions/deleteCreditorAction";
-import { updateCreditorAction } from "@/features/creditor/actions/updateCreditorAction";
+import { useCreateCreditor } from "@/features/creditor/hooks/useCreateCreditor";
+import { useDeleteCreditor } from "@/features/creditor/hooks/useDeleteCreditor";
+import { useUpdateCreditor } from "@/features/creditor/hooks/useUpdateCreditor";
 import { cn } from "@/lib/utils";
 import { Breadcrumb } from "@/shared/components/Breadcrumb";
 import { EmptyState } from "@/shared/components/EmptyState";
 import { FormAlert } from "@/shared/components/FormAlert";
 import { ListPageToolbar } from "@/shared/components/ListPageToolbar";
+import { MutationSubmitButton } from "@/shared/components/MutationSubmitButton";
 import { PageShell } from "@/shared/components/PageShell";
-import { PasswordField } from "@/shared/components/PasswordField";
 import type {
   CreditorDTO,
   CreditorWithDebtCount,
 } from "@/shared/dal/creditorDal";
 import { mapErr } from "@/shared/lib/format";
 import { formFull, formGrid, selectClass } from "@/shared/lib/formClasses";
-import { invalidateLedgerQueries } from "@/shared/lib/invalidateLedgerQueries";
 import { matchesSearch } from "@/shared/lib/listFilter";
 import { BottomSheet } from "@/shared/ui/bottom-sheet";
 import { Button } from "@/shared/ui/button";
@@ -31,7 +30,9 @@ import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 
 export function CreditorListPage() {
-  const qc = useQueryClient();
+  const createCreditor = useCreateCreditor();
+  const updateCreditor = useUpdateCreditor();
+  const deleteCreditor = useDeleteCreditor();
   const [sheet, setSheet] = useState<
     null | "creditor-create" | "creditor-edit"
   >(null);
@@ -39,7 +40,6 @@ export function CreditorListPage() {
   const clearEditsAfterCloseRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
-  const [formError, setFormError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [debtFilter, setDebtFilter] = useState<"all" | "has" | "none">("all");
 
@@ -73,22 +73,23 @@ export function CreditorListPage() {
     },
   });
 
-  async function invalidate() {
-    await invalidateLedgerQueries(qc);
-  }
-
   function closeSheet() {
     if (clearEditsAfterCloseRef.current) {
       clearTimeout(clearEditsAfterCloseRef.current);
       clearEditsAfterCloseRef.current = null;
     }
+    createCreditor.reset();
+    updateCreditor.reset();
+    deleteCreditor.reset();
     setSheet(null);
-    setFormError(null);
     clearEditsAfterCloseRef.current = setTimeout(() => {
       clearEditsAfterCloseRef.current = null;
       setEditCreditor(null);
     }, 320);
   }
+
+  const editPending =
+    updateCreditor.isPending || deleteCreditor.isPending;
 
   const maxAnimatedItems = 6;
 
@@ -188,7 +189,10 @@ export function CreditorListPage() {
                   type="button"
                   size="sm"
                   className="cursor-pointer shadow-sm"
-                  onClick={() => setSheet("creditor-create")}
+                  onClick={() => {
+                    createCreditor.reset();
+                    setSheet("creditor-create");
+                  }}
                 >
                   Thêm chủ nợ
                 </Button>
@@ -196,7 +200,7 @@ export function CreditorListPage() {
             }
           />
           <p className="text-xs text-muted-foreground">
-            Thêm / sửa / xóa cần mật khẩu.
+            Thêm / sửa / xóa cần xác thực (một lần mỗi giờ).
           </p>
           {data.length === 0 ? (
             <EmptyState
@@ -208,7 +212,10 @@ export function CreditorListPage() {
                   type="button"
                   size="sm"
                   className="cursor-pointer"
-                  onClick={() => setSheet("creditor-create")}
+                  onClick={() => {
+                    createCreditor.reset();
+                    setSheet("creditor-create");
+                  }}
                 >
                   Thêm chủ nợ
                 </Button>
@@ -251,6 +258,8 @@ export function CreditorListPage() {
                       className="cursor-pointer shrink-0"
                       onClick={(e) => {
                         e.preventDefault();
+                        updateCreditor.reset();
+                        deleteCreditor.reset();
                         setEditCreditor(c);
                         setSheet("creditor-edit");
                       }}
@@ -287,37 +296,43 @@ export function CreditorListPage() {
       >
         <form
           className={formGrid}
-          onSubmit={async (e) => {
+          autoComplete="off"
+          onSubmit={(e) => {
             e.preventDefault();
-            setFormError(null);
-            try {
-              await createCreditorAction(new FormData(e.currentTarget));
-              await invalidate();
-              closeSheet();
-            } catch (err) {
-              setFormError(mapErr(err));
-            }
+            createCreditor.mutate(new FormData(e.currentTarget), {
+              onSuccess: () => closeSheet(),
+            });
           }}
         >
           <div className={cn("grid gap-1.5", formFull)}>
             <Label htmlFor="c-name">Tên</Label>
-            <Input id="c-name" name="name" required />
+            <Input
+              id="c-name"
+              name="name"
+              required
+              disabled={createCreditor.isPending}
+            />
           </div>
           <div className="grid gap-1.5">
             <Label htmlFor="c-phone">Điện thoại</Label>
-            <Input id="c-phone" name="phone" />
+            <Input id="c-phone" name="phone" disabled={createCreditor.isPending} />
           </div>
           <div className="grid gap-1.5">
             <Label htmlFor="c-note">Ghi chú</Label>
-            <Input id="c-note" name="note" />
+            <Input id="c-note" name="note" disabled={createCreditor.isPending} />
           </div>
-          <PasswordField id="c-pw" className={formFull} />
-          {formError ? (
-            <FormAlert className={formFull}>{formError}</FormAlert>
+          {createCreditor.error ? (
+            <FormAlert className={formFull}>
+              {mapErr(createCreditor.error)}
+            </FormAlert>
           ) : null}
-          <Button type="submit" className={cn(formFull, "cursor-pointer")}>
+          <MutationSubmitButton
+            pending={createCreditor.isPending}
+            pendingLabel="Đang lưu…"
+            className={cn(formFull, "cursor-pointer")}
+          >
             Lưu
-          </Button>
+          </MutationSubmitButton>
         </form>
       </BottomSheet>
 
@@ -330,18 +345,14 @@ export function CreditorListPage() {
           <>
             <form
               className={cn(formGrid, "mb-4")}
-              onSubmit={async (e) => {
+              autoComplete="off"
+              onSubmit={(e) => {
                 e.preventDefault();
-                setFormError(null);
-                try {
-                  const fd = new FormData(e.currentTarget);
-                  fd.set("id", editCreditor.id);
-                  await updateCreditorAction(fd);
-                  await invalidate();
-                  closeSheet();
-                } catch (err) {
-                  setFormError(mapErr(err));
-                }
+                const fd = new FormData(e.currentTarget);
+                fd.set("id", editCreditor.id);
+                updateCreditor.mutate(fd, {
+                  onSuccess: () => closeSheet(),
+                });
               }}
             >
               <input type="hidden" name="id" value={editCreditor.id} />
@@ -352,6 +363,7 @@ export function CreditorListPage() {
                   name="name"
                   required
                   defaultValue={editCreditor.name}
+                  disabled={editPending}
                 />
               </div>
               <div className="grid gap-1.5">
@@ -360,6 +372,7 @@ export function CreditorListPage() {
                   id="ce-phone"
                   name="phone"
                   defaultValue={editCreditor.phone ?? ""}
+                  disabled={editPending}
                 />
               </div>
               <div className="grid gap-1.5">
@@ -368,41 +381,48 @@ export function CreditorListPage() {
                   id="ce-note"
                   name="note"
                   defaultValue={editCreditor.note ?? ""}
+                  disabled={editPending}
                 />
               </div>
-              <PasswordField id="ce-pw" className={formFull} />
-              {formError ? (
-                <FormAlert className={formFull}>{formError}</FormAlert>
+              {updateCreditor.error ? (
+                <FormAlert className={formFull}>
+                  {mapErr(updateCreditor.error)}
+                </FormAlert>
               ) : null}
-              <Button type="submit" className={cn(formFull, "cursor-pointer")}>
+              <MutationSubmitButton
+                pending={updateCreditor.isPending}
+                pendingLabel="Đang cập nhật…"
+                className={cn(formFull, "cursor-pointer")}
+              >
                 Cập nhật
-              </Button>
+              </MutationSubmitButton>
             </form>
             <form
               className={cn(formGrid, "border-t pt-4")}
-              onSubmit={async (e) => {
+              autoComplete="off"
+              onSubmit={(e) => {
                 e.preventDefault();
-                setFormError(null);
-                try {
-                  const fd = new FormData(e.currentTarget);
-                  fd.set("id", editCreditor.id);
-                  await deleteCreditorAction(fd);
-                  await invalidate();
-                  closeSheet();
-                } catch (err) {
-                  setFormError(mapErr(err));
-                }
+                const fd = new FormData(e.currentTarget);
+                fd.set("id", editCreditor.id);
+                deleteCreditor.mutate(fd, {
+                  onSuccess: () => closeSheet(),
+                });
               }}
             >
               <input type="hidden" name="id" value={editCreditor.id} />
-              <PasswordField id="cd-pw" className={formFull} />
-              <Button
-                type="submit"
+              {deleteCreditor.error ? (
+                <FormAlert className={formFull}>
+                  {mapErr(deleteCreditor.error)}
+                </FormAlert>
+              ) : null}
+              <MutationSubmitButton
+                pending={deleteCreditor.isPending}
+                pendingLabel="Đang xóa…"
                 variant="destructive"
                 className={cn(formFull, "cursor-pointer")}
               >
                 Xóa chủ nợ
-              </Button>
+              </MutationSubmitButton>
             </form>
           </>
         ) : null}

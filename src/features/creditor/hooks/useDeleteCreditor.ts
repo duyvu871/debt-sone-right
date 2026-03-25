@@ -1,0 +1,24 @@
+"use client";
+
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+
+import { useMutationAuth } from "@/shared/MutationAuthProvider";
+import { fetchMutation } from "@/shared/lib/fetchMutation";
+import { invalidateLedgerQueries } from "@/shared/lib/invalidateLedgerQueries";
+import { runMutationWithAuth } from "@/shared/lib/runMutationWithAuth";
+
+export function useDeleteCreditor() {
+  const qc = useQueryClient();
+  const { requireAuth, clearAuth } = useMutationAuth();
+  return useMutation({
+    mutationFn: (fd: FormData) =>
+      runMutationWithAuth(requireAuth, clearAuth, () => {
+        const id = fd.get("id");
+        if (typeof id !== "string" || !id) throw new Error("missing_id");
+        return fetchMutation(`/api/creditors/${encodeURIComponent(id)}`, {
+          method: "DELETE",
+        });
+      }),
+    onSuccess: () => invalidateLedgerQueries(qc),
+  });
+}
