@@ -13,6 +13,7 @@ export type DebtDTO = {
   occurredAt: Date;
   dueAt: Date;
   status: "OPEN" | "COMPLETED" | "OVERDUE";
+  note: string | null;
 };
 
 export async function listDebts(): Promise<DebtDTO[]> {
@@ -33,6 +34,7 @@ export async function listDebts(): Promise<DebtDTO[]> {
     occurredAt: d.occurredAt,
     dueAt: d.dueAt,
     status: d.status,
+    note: d.note ?? null,
   }));
 }
 
@@ -56,6 +58,7 @@ export async function getDebtById(debtId: string): Promise<DebtDTO | null> {
     occurredAt: d.occurredAt,
     dueAt: d.dueAt,
     status: d.status,
+    note: d.note ?? null,
   };
 }
 
@@ -80,6 +83,7 @@ export async function listDebtsByCreditorId(
     occurredAt: d.occurredAt,
     dueAt: d.dueAt,
     status: d.status,
+    note: d.note ?? null,
   }));
 }
 
@@ -90,6 +94,7 @@ export type CreateDebtInput = {
   occurredAt: Date;
   dueAt: Date;
   status: DebtDTO["status"];
+  note?: string | null;
 };
 
 export async function createDebt(input: CreateDebtInput): Promise<DebtDTO> {
@@ -105,6 +110,7 @@ export async function createDebt(input: CreateDebtInput): Promise<DebtDTO> {
       occurredAt: input.occurredAt,
       dueAt: input.dueAt,
       status: input.status,
+      note: input.note ?? null,
     },
   });
 
@@ -121,6 +127,7 @@ export async function createDebt(input: CreateDebtInput): Promise<DebtDTO> {
     occurredAt: d.occurredAt,
     dueAt: d.dueAt,
     status: d.status,
+    note: d.note ?? null,
   };
 }
 
@@ -132,6 +139,7 @@ export type UpdateDebtInput = {
   occurredAt: Date;
   dueAt: Date;
   status: DebtDTO["status"];
+  note?: string | null;
 };
 
 export async function updateDebt(input: UpdateDebtInput): Promise<DebtDTO> {
@@ -147,6 +155,7 @@ export async function updateDebt(input: UpdateDebtInput): Promise<DebtDTO> {
       occurredAt: input.occurredAt,
       dueAt: input.dueAt,
       status: input.status,
+      note: input.note ?? null,
     },
   });
 
@@ -163,6 +172,7 @@ export async function updateDebt(input: UpdateDebtInput): Promise<DebtDTO> {
     occurredAt: d.occurredAt,
     dueAt: d.dueAt,
     status: d.status,
+    note: d.note ?? null,
   };
 }
 
@@ -221,5 +231,6 @@ export async function appendDebtPrincipal(
     occurredAt: d.occurredAt,
     dueAt: d.dueAt,
     status: d.status,
+    note: d.note ?? null,
   };
 }

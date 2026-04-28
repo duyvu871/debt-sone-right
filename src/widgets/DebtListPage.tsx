@@ -649,6 +649,15 @@ export function DebtListPage() {
               <option value="OVERDUE">OVERDUE</option>
             </select>
           </div>
+          <div className={cn("grid gap-1.5", formFull)}>
+            <Label htmlFor="d-note">Nội dung</Label>
+            <Input
+              id="d-note"
+              name="note"
+              placeholder="Nợ để làm gì, mua gì…"
+              disabled={createDebt.isPending}
+            />
+          </div>
           {createDebt.error ? (
             <FormAlert className={formFull}>
               {mapErr(createDebt.error)}
@@ -763,6 +772,16 @@ export function DebtListPage() {
                   <option value="COMPLETED">COMPLETED</option>
                   <option value="OVERDUE">OVERDUE</option>
                 </select>
+              </div>
+              <div className={cn("grid gap-1.5", formFull)}>
+                <Label htmlFor="de-note">Nội dung</Label>
+                <Input
+                  id="de-note"
+                  name="note"
+                  placeholder="Nợ để làm gì, mua gì…"
+                  defaultValue={editDebt.note ?? ""}
+                  disabled={editDebtPending}
+                />
               </div>
               {updateDebt.error ? (
                 <FormAlert className={formFull}>

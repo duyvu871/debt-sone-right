@@ -350,6 +350,9 @@ export function DebtDetailPage({ debtId }: { debtId: string }) {
               </Link>
             ),
           },
+          ...(debt.note
+            ? [{ label: "Nội dung", value: debt.note }]
+            : []),
         ]}
       />
 
@@ -637,6 +640,16 @@ export function DebtDetailPage({ debtId }: { debtId: string }) {
                   <option value="COMPLETED">COMPLETED</option>
                   <option value="OVERDUE">OVERDUE</option>
                 </select>
+              </div>
+              <div className={cn("grid gap-1.5", formFull)}>
+                <Label htmlFor="dde-note">Nội dung</Label>
+                <Input
+                  id="dde-note"
+                  name="note"
+                  placeholder="Nợ để làm gì, mua gì…"
+                  defaultValue={debt.note ?? ""}
+                  disabled={editDebtPending}
+                />
               </div>
               {updateDebt.error ? (
                 <FormAlert className={formFull}>

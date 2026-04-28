@@ -7,6 +7,7 @@ export const createDebtSchema = z.object({
   occurredAt: z.coerce.date(),
   dueAt: z.coerce.date(),
   status: z.enum(["OPEN", "COMPLETED", "OVERDUE"]).default("OPEN"),
+  note: z.string().optional().nullable(),
 });
 
 export const updateDebtSchema = z.object({
@@ -17,6 +18,7 @@ export const updateDebtSchema = z.object({
   occurredAt: z.coerce.date(),
   dueAt: z.coerce.date(),
   status: z.enum(["OPEN", "COMPLETED", "OVERDUE"]).default("OPEN"),
+  note: z.string().optional().nullable(),
 });
 
 export const deleteDebtSchema = z.object({

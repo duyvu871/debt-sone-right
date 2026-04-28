@@ -56,6 +56,7 @@ model Debt {
   occurredAt   DateTime
   dueAt        DateTime
   status       DebtStatus @default(OPEN)
+  note         String?
   createdAt    DateTime @default(now())
 
   creditor Creditor @relation(fields: [creditorId], references: [id], onDelete: Restrict)
